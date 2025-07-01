@@ -11,3 +11,15 @@ export const getAdmin = (page) =>
 ////------This is for delete admin data---/////
 export const deleteAdmin = (id) =>
   apiClient.delete(`/admins/${id}`).then((res) => res.data);
+
+////------This is for update admin data---/////
+export const updateAdmin = (data) =>
+  apiClient.post(`/admins/update`, data).then((res) => res.data);
+
+////------This is for show each admin data---/////
+export const showAdmin = () =>
+  apiClient.get(`/admins/show`).then((res) => res.data);
+
+//---------This is for create admin----//
+export const resetPassword = (data) =>
+  apiClient.post("/admin/resetpassword", data).then((res) => res.data);

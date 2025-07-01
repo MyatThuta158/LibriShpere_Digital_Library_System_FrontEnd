@@ -1,54 +1,72 @@
 import React, { useState } from "react";
-import { createAuthors, getAuthors } from "../../../api/authorsApi";
+import { createAuthors } from "../../../api/authorsApi";
 
 function AddAuthors() {
-  //-------This is the initial state of the author data----//
-  const initial = {
-    name: "",
-  };
-  //------This is for message----//
-  const [message, setMessage] = useState("");
+  // Initial author state
+  const initial = { name: "" };
 
-  //------This store the author data---//
+  // State for the author data, success message, and error message
   const [author, setAuthor] = useState(initial);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
+  // Update author state when input changes
   const handleInputChange = (e) => {
-    const { name } = e.target;
-
-    setAuthor({ ...author, [name]: e.target.value });
+    const { name, value } = e.target;
+    // Clear error when the user starts typing
+    if (error) setError("");
+    setAuthor({ ...author, [name]: value });
   };
+
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    try {
-      let result = await createAuthors(author);
-      setMessage(result.message);
+    // Validate input: if empty, set error message and stop submission
+    if (!author.name.trim()) {
+      setError("Name is required");
+      return;
+    }
 
-      //const updateAuthors=await getAuthors();
+    // Clear any previous error message before proceeding
+    setError("");
+
+    try {
+      // Call API to create the author
+      let result = await createAuthors(author);
+
+      // Display success message from the API (or fallback message)
+      setMessage(result.message || "Author saved successfully");
+
+      // Reset form
       setAuthor(initial);
     } catch (err) {
-      console.log(err);
+      console.error(err);
+      setMessage("There was an error saving the author");
     }
   };
+
   return (
     <div>
       <h1 className="text-center">Add Authors</h1>
-
       <div className="container d-flex justify-content-center">
         <form className="form-group w-50" onSubmit={handleSubmit}>
           <input
             type="text"
             name="name"
             value={author.name}
-            className="form-control w-100"
+            placeholder="Enter author name"
+            className={`form-control w-100 ${error ? "is-invalid" : ""}`}
             onChange={handleInputChange}
           />
+          {/* Show error message below the input */}
+          {error && <div className="invalid-feedback d-block">{error}</div>}
           <button type="submit" className="btn btn-primary mx-auto mt-2">
             Add Author
           </button>
         </form>
-        {/* This is for message box */}
 
+        {/* Modal for displaying success or error messages */}
         {message && (
           <div
             className="modal fade show"
@@ -60,31 +78,23 @@ function AddAuthors() {
             <div className="modal-dialog">
               <div className="modal-content">
                 <div className="modal-header">
-                  <h1
-                    className="modal-title fs-5"
-                    id="staticBackdropLabel"
-                  ></h1>
+                  <h5 className="modal-title" id="messageModalLabel">
+                    Message
+                  </h5>
                   <button
                     type="button"
                     className="btn-close"
-                    data-bs-dismiss="modal"
-                    aria-label="Close"
+                    onClick={() => setMessage("")}
                   ></button>
                 </div>
-                <div className="modal-body">...</div>
+                <div className="modal-body">{message}</div>
                 <div className="modal-footer">
                   <button
                     type="button"
-                    className="btn btn-secondary"
-                    data-bs-dismiss="modal"
-                    onClick={() => {
-                      setMessage(null);
-                    }}
+                    className="btn btn-primary"
+                    onClick={() => setMessage("")}
                   >
                     Close
-                  </button>
-                  <button type="button" className="btn btn-primary">
-                    Understood
                   </button>
                 </div>
               </div>

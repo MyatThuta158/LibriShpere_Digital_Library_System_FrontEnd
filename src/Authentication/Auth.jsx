@@ -1,67 +1,146 @@
+// import { createContext, useEffect, useMemo, useState, useContext } from "react";
+// import Cookies from "js-cookie";
+
+// const AuthContext = createContext(null);
+
+// export const AuthProvider = ({ children }) => {
+//   // Safely get user data from local storage
+//   const storedUser = localStorage.getItem("user");
+//   const userData =
+//     storedUser && storedUser !== "undefined" ? JSON.parse(storedUser) : null;
+//   const [user, setUser] = useState(userData);
+
+//   // Safely get token data from local storage
+//   const storedToken = localStorage.getItem("token");
+//   const tokenData =
+//     storedToken && storedToken !== "undefined" ? JSON.parse(storedToken) : null;
+//   const [token, setToken] = useState(tokenData);
+
+//   useEffect(() => {
+//     // Update local storage for user
+//     if (user) {
+//       localStorage.setItem("user", JSON.stringify(user));
+//     } else {
+//       localStorage.removeItem("user");
+//     }
+
+//     // Update token in cookies and local storage
+//     if (token) {
+//       Cookies.set("token", token, { expires: 1 });
+//       localStorage.setItem("token", JSON.stringify(token));
+//     } else {
+//       Cookies.remove("token");
+//       localStorage.removeItem("token");
+//     }
+//   }, [user, token]);
+
+//   // Function to log in a user
+//   const loginUser = (user, token) => {
+//     setUser(user);
+//     setToken(token);
+//     Cookies.set("token", token, { expires: 1 });
+//     localStorage.setItem("user", JSON.stringify(user));
+//     localStorage.setItem("token", JSON.stringify(token));
+//   };
+
+//   // Function to log out a user
+//   const logoutUser = () => {
+//     console.log("logout");
+//     setUser(null);
+//     setToken(null);
+//     Cookies.remove("token");
+//     localStorage.removeItem("user");
+//     localStorage.removeItem("token");
+//   };
+
+//   // Memoize the context value to optimize performance
+//   const authContextValue = useMemo(
+//     () => ({
+//       user,
+//       token,
+//       loginUser,
+//       logoutUser,
+//     }),
+//     [user, token]
+//   );
+
+//   return (
+//     <AuthContext.Provider value={authContextValue}>
+//       {children}
+//     </AuthContext.Provider>
+//   );
+// };
+
+// export const useAuth = () => {
+//   return useContext(AuthContext);
+// };
+
+// src/Authentication/Auth.jsx
 import { createContext, useEffect, useMemo, useState, useContext } from "react";
 import Cookies from "js-cookie";
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  //------This get user data from local storage----//
-  const userData = JSON.parse(localStorage.getItem("user"));
-  const [user, setuser] = useState(userData || null);
+  // Initialize state from localStorage
+  const storedUser = localStorage.getItem("user");
+  const userData =
+    storedUser && storedUser !== "undefined" ? JSON.parse(storedUser) : null;
+  const [user, setUser] = useState(userData);
 
-  //------This get cookies data from local storage----//
-  const cookiesData = JSON.parse(localStorage.getItem("cookies"));
-  const [token, setToken] = useState(cookiesData || null);
+  const storedToken = localStorage.getItem("token");
+  const tokenData =
+    storedToken && storedToken !== "undefined" ? JSON.parse(storedToken) : null;
+  const [token, setToken] = useState(tokenData);
 
-  //------This insert the user data with use effect into local storeage---//
+  // On mount, check token expiration
   useEffect(() => {
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("user");
+    const loginTime = localStorage.getItem("loginTime");
+    if (tokenData && loginTime) {
+      const elapsed = Date.now() - Number(loginTime);
+      const oneDayMs = 24 * 60 * 60 * 1000; // milliseconds in 24h :contentReference[oaicite:5]{index=5}
+      if (elapsed > oneDayMs) {
+        // Clear all storage if expired :contentReference[oaicite:6]{index=6}
+        logoutUser();
+      } else {
+        // Restore context
+        setUser(userData);
+        setToken(tokenData);
+      }
     }
+  }, []); // run once on mount :contentReference[oaicite:7]{index=7}
 
-    //This set the token into local storage
-
-    if (token) {
-      Cookies.set("token", token, { expires: 1 });
-    }
-  }, [user, token]);
-
-  //----This is for login user----//
+  // Log in: store user, token, and loginTime
   const loginUser = (user, token) => {
-    setuser(user);
+    setUser(user);
     setToken(token);
-
-    //---This set cookies for user---//
-    Cookies.set("token", token, { expires: 1 });
+    const now = Date.now();
+    localStorage.setItem("user", JSON.stringify(user)); // persist user :contentReference[oaicite:8]{index=8}
+    localStorage.setItem("token", JSON.stringify(token)); // persist token :contentReference[oaicite:9]{index=9}
+    localStorage.setItem("loginTime", now.toString()); // track login timestamp :contentReference[oaicite:10]{index=10}
+    Cookies.set("token", token, { expires: 1 }); // cookie fallback (1 day)
   };
 
-  ////----This for memorize user---///
-  const memorizeduser = useMemo(() => ({ user, token }), [user, token]);
-
-  //---This is for logout user----//
+  // Log out: clear context, cookies, and all localStorage :contentReference[oaicite:11]{index=11}
   const logoutUser = () => {
-    setuser(null);
+    setUser(null);
     setToken(null);
     Cookies.remove("token");
+    localStorage.clear();
   };
 
   const authContextValue = useMemo(
-    () => ({
-      user,
-      cookiesData,
-      loginUser,
-      logoutUser,
-    }),
+    () => ({ user, token, loginUser, logoutUser }),
     [user, token]
   );
 
   return (
-    <AuthContext.Provider value={{ loginUser, logoutUser, user, token }}>
+    <AuthContext.Provider value={authContextValue}>
       {children}
     </AuthContext.Provider>
   );
 };
+
 export const useAuth = () => {
   return useContext(AuthContext);
 };

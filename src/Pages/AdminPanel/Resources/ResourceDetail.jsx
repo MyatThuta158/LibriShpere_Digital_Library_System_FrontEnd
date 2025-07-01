@@ -1,206 +1,314 @@
-// import React, { useEffect, useState } from "react";
-// import { useParams } from "react-router-dom";
-// import DocViewer, { DocViewerRenderers } from "@cyntler/react-doc-viewer";
-// import "@cyntler/react-doc-viewer/dist/index.css";
-
-// import { detailResource, getFile } from "../../../api/resourceApi";
-
-// function ResourceDetail() {
-//   const { id } = useParams(); // Get the resource ID from the URL
-//   const [docs, setDocs] = useState([]);
-//   const [resource, setResource] = useState({}); ///-----This is to store resource---//
-
-//   useEffect(() => {
-//     const fetchResource = async () => {
-//       const dataFetch = await detailResource(id);
-
-//       setResource(dataFetch.message);
-//     };
-
-//     fetchResource();
-//   }, [id]);
-
-//   useEffect(() => {
-//     const fetchData = async () => {
-//       try {
-//         // Fetch the filename or file path based on the ID
-//         const fileName = resource.file; // Replace with logic to dynamically fetch the filename based on ID
-
-//         // Fetch the file blob from the backend
-//         const file = await getFile(fileName);
-
-//         // Create a URL for the file blob
-//         const fileUrl = URL.createObjectURL(new Blob([file]));
-
-//         // Update the documents array with the file URL
-//         setDocs([
-//           {
-//             uri: fileUrl, // Add the file URL here
-//             fileType: "pdf", // Specify the file type if known
-//           },
-//         ]);
-//       } catch (error) {
-//         console.error("Error fetching the file:", error);
-//       }
-//     };
-
-//     fetchData();
-//   }, [resource]);
-//   console.log(resource.file);
-//   return (
-//     <div>
-//       {docs.length > 0 ? (
-//         <DocViewer
-//           documents={docs}
-//           initialActiveDocument={docs[0]}
-//           pluginRenderers={DocViewerRenderers}
-//         />
-//       ) : (
-//         <p>Loading document...</p>
-//       )}
-//     </div>
-//   );
-// }
-
-import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { Document, Page, pdfjs } from "react-pdf";
-import "react-pdf/dist/esm/Page/AnnotationLayer.css"; // Import annotation styles
-import { getFile } from "../../../api/resourceApi";
-
-// Set up the PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  detail,
+  incrementView,
+  deleteResource,
+} from "../../../api/resourceApi";
+import { resourceReviews, deleteReview } from "../../../api/reviewApi";
+import { FaStar, FaTrash } from "react-icons/fa";
 
 function ResourceDetail() {
   const { id } = useParams();
-  const [fileUrl, setFileUrl] = useState(null);
-  const [numPages, setNumPages] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1); // Current page state
+  const navigate = useNavigate();
+  const baseUrl = import.meta.env.VITE_API_URL;
 
-  // Fetch the PDF file
+  const [resource, setResource] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [reviews, setReviews] = useState([]);
+  const [role, setRole] = useState(null);
+  const [userid, setUserid] = useState(0);
+
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState("");
+  const [modalType, setModalType] = useState("success");
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Load user info
   useEffect(() => {
-    const fetchFile = async () => {
-      // const fileURL = `http://127.0.0.1:8000/file/8P5CDPHqCBzpkFc0M3G2nBs9zOlkVDF3nPGEuX4W.pdf`;
-      // setFileUrl(fileURL);
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      setUserid(parsed.id);
+      setRole(parsed.role);
+    }
+  }, []);
 
-      const fileURL = await getFile("file/different_mode_of_interaction.mp4");
-      setFileUrl(fileURL);
+  // Fetch resource & increment view
+  useEffect(() => {
+    const getResource = async () => {
+      try {
+        const res = await detail(id);
+        setResource(res.data);
+        try {
+          await incrementView(id);
+        } catch {}
+        await fetchReviews();
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     };
-
-    fetchFile();
+    getResource();
   }, [id]);
 
-  // Callback when the document loads successfully
-  const onLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
-    setCurrentPage(1); // Reset to page 1 when a new document is loaded
+  const fetchReviews = async () => {
+    try {
+      const rr = await resourceReviews(id);
+      setReviews(rr.reviews);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // Handlers for navigating pages
-  const goToPreviousPage = () => {
-    setCurrentPage((prevPage) => Math.max(prevPage - 1, 1));
+  // Delete review handler
+  const handleDeleteReview = async (reviewId) => {
+    try {
+      await deleteReview(reviewId);
+      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      setModalMessage("Review deleted successfully!");
+      setModalType("success");
+      setShowModal(true);
+    } catch {
+      setModalMessage("Failed to delete review.");
+      setModalType("error");
+      setShowModal(true);
+    }
   };
 
-  const goToNextPage = () => {
-    setCurrentPage((prevPage) => Math.min(prevPage + 1, numPages));
+  // Delete resource confirmation
+  const promptDeleteResource = () => setShowDeleteConfirm(true);
+  const cancelDelete = () => setShowDeleteConfirm(false);
+
+  const confirmDeleteResource = async () => {
+    try {
+      await deleteResource(id);
+
+      // Show success modal
+      setShowSuccessModal(true);
+      setShowDeleteConfirm(false);
+
+      // After 6s, hide and navigate back
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        navigate(-1);
+      }, 6000);
+    } catch {
+      setModalMessage("Failed to delete resource. Please try again.");
+      setModalType("error");
+      setShowModal(true);
+      setShowDeleteConfirm(false);
+    }
   };
+
+  const closeModal = () => setShowModal(false);
+
+  if (loading) return <div className="text-center mt-5">Loading...</div>;
+  if (!resource)
+    return <div className="text-center mt-5">Resource not found</div>;
 
   return (
     <div>
-      {fileUrl ? (
-        <div>
-          {/* PDF Document */}
-          <Document file={fileUrl} onLoadSuccess={onLoadSuccess}>
-            <Page pageNumber={currentPage} />
-          </Document>
+      {/* Back arrow */}
+      <span
+        onClick={() => navigate(-1)}
+        className="ms-2"
+        style={{ cursor: "pointer" }}
+      >
+        {/* SVG arrow here */}
+      </span>
 
-          {/* Pagination Controls */}
-          <div style={{ marginTop: "20px", textAlign: "center" }}>
-            <button onClick={goToPreviousPage} disabled={currentPage === 1}>
-              Previous
-            </button>
-            <span style={{ margin: "0 10px" }}>
-              Page {currentPage} of {numPages}
-            </span>
-            <button onClick={goToNextPage} disabled={currentPage === numPages}>
-              Next
+      {/* Resource Detail */}
+      <div className="container mt-4">
+        <div className="row">
+          <div className="col-md-4">
+            <img
+              src={`${baseUrl}storage/${resource.cover_photo}`}
+              alt={resource.name}
+              className="img-fluid rounded shadow"
+              style={{ height: "450px", objectFit: "cover" }}
+            />
+          </div>
+          <div className="col-md-8">
+            <h2 className="fw-bold">{resource.name}</h2>
+            <p className="text-muted">By Author: {resource.author.name}</p>
+            <div className="d-flex align-items-center mb-3">
+              <span className="ms-2 text-primary">
+                {reviews.length} Review(s)
+              </span>
+            </div>
+            <p className="w-75 text-justify">{resource.Description}</p>
+            <p className="fw-bold">Publish Date: {resource.publish_date}</p>
+
+            <div className="d-flex gap-3 mt-3">
+              <button
+                className="btn btn-warning"
+                onClick={() => navigate(`/Admin/updateResource/${id}`)}
+              >
+                {/* Pencil SVG */}
+                Edit
+              </button>
+              <button className="btn btn-danger" onClick={promptDeleteResource}>
+                {/* Trash SVG */}
+                Delete
+              </button>
+            </div>
+
+            <button
+              className="mt-3 btn btn-primary px-4 py-2"
+              style={{ borderRadius: "10px" }}
+              onClick={() => navigate(`/Admin/ReadResource/${id}`)}
+            >
+              View Resource
             </button>
           </div>
-          {/* <video
-          src="http://127.0.0.1:8000/file/different_mode_of_interaction.mp4"
-          controls
-          style={{
-            width: "100%",
-            maxWidth: "800px",
-            margin: "0 auto",
-            display: "block",
-          }}
-        >
-          Your browser does not support the video tag.
-        </video> */}
         </div>
-      ) : (
-        <p>Loading document...</p>
+      </div>
+
+      <hr />
+
+      {/* Reviews */}
+      <div className="container">
+        <h3>User Reviews</h3>
+        {reviews.length > 0 ? (
+          reviews.map((review) => (
+            <div key={review.id} className="p-3 border rounded mb-2 d-flex">
+              <img
+                src={
+                  review.profile_pic
+                    ? `${baseUrl}storage/${review.profile_pic}`
+                    : "/Customer/pic.jpg"
+                }
+                alt={review.user_name}
+                className="rounded-circle"
+                style={{ width: "50px", height: "50px", objectFit: "cover" }}
+              />
+              <div className="ms-3 flex-grow-1">
+                <div className="d-flex align-items-center">
+                  <p className="fw-bold mb-0">{review.user_name}</p>
+                  <FaTrash
+                    className="ms-auto cursor-pointer"
+                    onClick={() => handleDeleteReview(review.id)}
+                  />
+                </div>
+                <div className="d-flex">
+                  {[...Array(5)].map((_, j) => (
+                    <FaStar
+                      key={j}
+                      className={
+                        j < review.ReviewStar
+                          ? "text-warning"
+                          : "text-secondary"
+                      }
+                    />
+                  ))}
+                </div>
+                <p>{review.ReviewMessage}</p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p>No reviews yet.</p>
+        )}
+      </div>
+
+      {/* Generic success/error modal for review deletion */}
+      {showModal && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div
+                className={`modal-header ${
+                  modalType === "success" ? "bg-success" : "bg-danger"
+                } text-white`}
+              >
+                <h5 className="modal-title">
+                  {modalType === "success" ? "Success" : "Error"}
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={closeModal}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <p>{modalMessage}</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={closeModal}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm-delete modal */}
+      {showDeleteConfirm && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header bg-primary text-dark">
+                <h5 className="modal-title">Confirm Delete</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={cancelDelete}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <p>Are you sure you want to delete this resource?</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={cancelDelete}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={confirmDeleteResource}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-dismiss success modal */}
+      {showSuccessModal && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header bg-success text-white">
+                <h5 className="modal-title">Success</h5>
+              </div>
+              <div className="modal-body">
+                <p>Resource deleted successfully!</p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
 export default ResourceDetail;
-
-///////////////////////////
-
-// import React, { useState, useEffect } from "react";
-// import { useParams } from "react-router-dom";
-// import ePub from "epubjs"; // Import the epub.js library
-
-// function ResourceDetail() {
-//   const { id } = useParams(); // Get the resource ID from the URL
-//   const [book, setBook] = useState(null); // State to hold the book object
-
-//   useEffect(() => {
-//     const fetchFile = async () => {
-//       try {
-//         // Assuming you're fetching the EPUB file URL based on the resource ID
-//         const response = await fetch(
-//           `http://127.0.0.1:8000/file/zPYCKdNwUjwWhRxlVLeCcIMUEdWDl0i1MZA5x8V0.epub`
-//         );
-//         const blob = await response.blob();
-//         const url = URL.createObjectURL(blob); // Create a URL for the blob
-
-//         // Load the EPUB file using epub.js
-//         const epubBook = ePub(url);
-
-//         // Set the book in the state
-//         setBook(epubBook);
-//       } catch (error) {
-//         console.error("Error fetching the EPUB file:", error);
-//       }
-//     };
-
-//     fetchFile();
-//   }, [id]);
-
-//   useEffect(() => {
-//     if (book) {
-//       // Render the EPUB file when the book is loaded
-//       const rendition = book.renderTo("viewer", {
-//         width: "100%",
-//         height: "600px", // Set the height as per your requirement
-//       });
-
-//       book.ready.then(() => {
-//         rendition.display(); // Display the first chapter
-//       });
-//     }
-//   }, [book]);
-
-//   return (
-//     <div>
-//       <div id="viewer" style={{ width: "100%", height: "600px" }}></div>
-//       {!book && <p>Loading EPUB file...</p>}
-//     </div>
-//   );
-// }
-
-// export default ResourceDetail;

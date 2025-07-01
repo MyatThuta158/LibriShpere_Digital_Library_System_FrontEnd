@@ -18,3 +18,7 @@ export const updateGenre = (id, data) =>
 //----This is to delete genre----//
 export const deleteGenre = (id) =>
   apiClient.delete(`/genres/${id}`).then((response) => response.data);
+
+//----This is get 5 genre----//
+export const getGenre = () =>
+  apiClient.get(`/getGenre`).then((response) => response.data);
